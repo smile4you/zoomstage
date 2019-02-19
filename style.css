@@ -5,6 +5,12 @@ body {
     overflow: hidden;
 }
 
+.attachment-full {
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 9999;
+}
 .header {
     color: white;
     font-size: 120px;
