@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link href="https://fonts.googleapis.com/css?family=Lato" rel="stylesheet">
+    <script src="zoomstage_pure.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+
+
+<div id="stage" class="stage">
+    <div id="content" class="content">
+
+        <div class="header" style="left: 1040px; top: 270px;">zoomstage</div>
+
+
+        <div class="block bc1 no-zoom" style=" left: 800px; top: 160px;">2 finger pinch zoom support on touchscreens
+            and touchpads.
+        </div>
+        <div class="block big bc1 no-zoom" style=" left: 800px; top: 160px;">Pinch</div>
+
+        <div class="block bc2 no-zoom" style=" left: 1040px; top: 160px;">Supports 2-finger pan on touchpads, 1-finger
+            pan on
+            touchscreens and mouse down + move pan.
+        </div>
+        <div class="block big bc2 no-zoom" style=" left: 1040px; top: 160px;">Pan</div>
+
+        <div class="block bc3 no-zoom" style=" left: 1280px; top: 160px;">Zoom via CTRL + mouse wheel in touchpad mode.
+            <br>Or without CTRL in special mouse mode.
+        </div>
+        <div class="block big bc3 no-zoom" style=" left: 1280px; top: 160px;">Zoom</div>
+
+
+        <div class="block   no-zoom" style="left: 320px; top: 300px;">Wide range of browser support including MacOS
+            Safari gesture events.
+        </div>
+        <div class="block big   no-zoom" style=" left: 320px; top: 300px;">Desktop</div>
+
+        <div class="block bc3 no-zoom" style="left: 560px; top: 300px;">Native zoom feeling on iPhones and iPads</div>
+        <div class="block big bc3 no-zoom" style=" left: 560px; top: 300px;">iOS</div>
+
+        <div class="block bc2 no-zoom" style=" left: 800px; top: 300px;">Native zoom feeling on Android devices</div>
+        <div class="block big bc2 no-zoom" style=" left: 800px; top: 300px;">Android</div>
+
+
+        <div class="block   no-zoom" style=" left: 1040px; top: 440px;">Single small typescript or javascript file with
+            zero dependencies
+        </div>
+        <div class="block big  no-zoom" style=" left: 1040px; top: 440px;">Tiny</div>
+
+        <div class="block bc1 no-zoom" style=" left: 1280px; top: 440px;">Native pan and zoom speed on mobile devices
+            thanks to pure css transformation and css-caching
+        </div>
+        <div class="block big bc1 no-zoom" style=" left: 1280px; top: 440px;">Fast</div>
+
+        <div class="block bc2 no-zoom" style=" left: 1520px; top: 440px;">Just a couple of code lines turn any DIV into
+            a zoomstage
+        </div>
+        <div class="block bc2 big no-zoom" style=" left: 1520px; top: 440px;">Simple</div>
+
+
+        <div class="block   bc1 no-zoom" style=" left: 800px; top: 580px;">Velocity Pan animations and flying zoom
+            animation to any point on the stage.
+        </div>
+        <div class="block medium bc1 no-zoom" style=" left: 800px; top: 580px;">Animated</div>
+
+        <div class="block bc3 no-zoom" style=" left: 1040px; top: 580px;">Mouse/Touch Event pass through to support
+            selection and movement of items on the stage
+        </div>
+        <div class="block bc3 medium no-zoom" style=" left: 1040px; top: 580px;">Interactive</div>
+
+        <div class="block no-zoom" style=" left: 1280px; top: 580px;">Mac like scrollbars to indicate scroll position
+            when panning around
+        </div>
+        <div class="block medium no-zoom" style=" left: 1280px; top: 580px;">With Scrollbars</div>
+
+        <p class="story">
+            zoomstage is a lightweight js- or ts component to turn any two divs into an area which can be zoomed and
+            panned. The stage remains interactive - try to move the colored boxes around. <br>zoomstage is intended to
+            work on all devices and browsers with maxium performance - especially on mobile.<br>
+        </p>
+
+
+    </div>
+</div>
+
+
+<script>
+        window.zoomstage.init({
+            stageSelector: "#stage",
+            contentSelector: "#content"
+        });
+
+        zoomstage.attach();
+
+</script>
+
+</body>
+</html>
