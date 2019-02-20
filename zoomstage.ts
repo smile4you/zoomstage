@@ -1,5 +1,5 @@
 /*
-zoomstage
+zoomstage.net
 
 Copyright (c) 2019 Christoph Clermont
 
