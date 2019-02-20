@@ -3,4 +3,4 @@ single file unopinionated cross device zoom and pan library that fully supports 
 
 Available in typescript and javascript to run with module or amd pattern. Or as "pure" js-library in global scope.
 
-See zoomstage (master) in action: https://smile4you.github.io/zoomstage/
+See zoomstage (master) in action: http://zoomstage.net
