@@ -1,5 +1,5 @@
 /*
-zoomstage
+zoomstage.net
 
 Copyright (c) 2019 Christoph Clermont
 
@@ -112,12 +112,22 @@ SOFTWARE.
     var panAnimationRunning = false;
     var lastWheelEvent = new Date().getMilliseconds();
     var isTouchPad = true; // default!
+    var hasMousePanOnNoZoomItems = false; // default!
     var i_am_attached = false;
     function init(config) {
         var initialZoom = config.initialZoom || 0;
         var skipInitAnimation = false;
         if (initialZoom === -1) {
             skipInitAnimation = true;
+        }
+        if (config.bleed >= 0) {
+            bleed = config.bleed;
+        }
+        if (typeof config.edgeScroll === "boolean") {
+            edgeScroll = config.edgeScroll;
+        }
+        if (typeof config.mousePanOnNoZoomItems === "boolean") {
+            hasMousePanOnNoZoomItems = config.mousePanOnNoZoomItems;
         }
         zoomChangedCallback = config.zoomChanged_Callback;
         mouseUpCallback = config.mouseUp_Callback; // will be fired when no zoom has happend
@@ -126,18 +136,18 @@ SOFTWARE.
         app = document.querySelector(config.stageSelector);
         transformRoot = document.querySelector(config.contentSelector);
         if (!app) {
-            throw ("zoomManager: No stage [" + config.stageSelector + "] element found");
+            throw ("zoomstage: No stage [" + config.stageSelector + "] element found");
         }
         if (!transformRoot) {
-            throw ("zoomManager: No content-container [" + config.contentSelector + "] element found");
+            throw ("zoomstage: No content-container [" + config.contentSelector + "] element found");
         }
         contentHeight = getContentHeight();
         contentWidth = getContentWidth();
         if (!(contentWidth > 0)) {
-            throw ("zoomManager: can't determine content width [" + contentWidth + "] ");
+            throw ("zoomstage: can't determine content width [" + contentWidth + "] ");
         }
         if (!(contentHeight > 0)) {
-            throw ("zoomManager: can't determine content height [" + contentHeight + "] ");
+            throw ("zoomstage: can't determine content height [" + contentHeight + "] ");
         }
         curZoom = 1;
         maxZoom = config.maxZoom || 4;
@@ -280,6 +290,16 @@ SOFTWARE.
         return isTouchPad ? "touch" : "mouse";
     }
     exports.touchpadOrMouse = touchpadOrMouse;
+    function mousePanOnNoZoomItems(newValue) {
+        if (newValue === "touch") {
+            hasMousePanOnNoZoomItems = true;
+        }
+        if (newValue === "mouse") {
+            hasMousePanOnNoZoomItems = false;
+        }
+        return isTouchPad ? "touch" : "mouse";
+    }
+    exports.mousePanOnNoZoomItems = mousePanOnNoZoomItems;
     function wasTouchEvent(ev) {
         return ev.type == "touchend" || ev.type == "touchstart" || ev.type == "touchmove" || ev.type == "touchcancel";
     }
@@ -482,17 +502,17 @@ SOFTWARE.
         return curTranslateTop;
     }
     function appOffsetLeft() {
-        return app.offsetLeft;
+        return getElementOffset(app, "offsetLeft");
     }
     function appOffsetTop() {
-        return app.offsetTop;
+        return getElementOffset(app, "offsetTop");
     }
     function appWidth() {
-        return app.offsetWidth;
+        return getElementOffset(app, "offsetWidth");
     }
     exports.appWidth = appWidth;
     function appHeight() {
-        return app.offsetHeight;
+        return getElementOffset(app, "offsetHeight");
     }
     exports.appHeight = appHeight;
     function getContentWidth() {
@@ -586,6 +606,22 @@ SOFTWARE.
         if (singleTouchOverlay.style.opacity !== "0") {
             singleTouchOverlay.style.opacity = "0";
         }
+    }
+    function getElementOffset(element, property) {
+        if (property == "offsetLeft" || property == "offsetTop") {
+            var actualOffset = element[property];
+            var current = element.offsetParent;
+            //Look up the node tree to add up all the offset value
+            while (current != null) {
+                actualOffset += current[property];
+                current = current.offsetParent;
+            }
+            return actualOffset;
+        }
+        else if (property == "offsetHeight" || property == "offsetWidth") {
+            return element[property];
+        }
+        return false;
     }
     function showScrollBar() {
         if (scrollBarTimeout) {
@@ -690,7 +726,7 @@ SOFTWARE.
      click
     
      **************************/
-    exports.touchOrMousePanActive = false;
+    var touchOrMousePanActive = false;
     var twoFingerTouchActive = false;
     var startTime = null;
     var Timer50msMouseDownHandle = null;
@@ -719,7 +755,7 @@ SOFTWARE.
         // stop animation if running
         panAnimationRunning = false;
         mouse.initialMovement = 0;
-        debuglog("ZoomManager onTouchStartOrMouseDown: pageX=" + ev.pageX + "  pageY=" + ev.pageY);
+        debuglog("zoomstage onTouchStartOrMouseDown: pageX=" + ev.pageX + "  pageY=" + ev.pageY);
         // second finger (or more, but we only look on finger 1+2)
         // we look always for it, to execute pinch-zoom
         if (touchCount > 0 && wasTouchEvent(ev) && ev.touches.length > 1) {
@@ -750,12 +786,12 @@ SOFTWARE.
                     showSingleTouchOverlay();
                 }
                 else {
-                    exports.touchOrMousePanActive = true;
+                    touchOrMousePanActive = true;
                     ev.preventDefault();
                 }
             }
             else {
-                exports.touchOrMousePanActive = true;
+                touchOrMousePanActive = true;
                 ev.preventDefault();
             }
             transformRoot.style.cursor = "move"; // only visible in mouse mode
@@ -774,32 +810,43 @@ SOFTWARE.
             if (isTargetInputElement(ev.target)) {
                 return;
             }
+            var timeOut_1 = wasTouchEvent(ev) ? 50 : 10; // mouse has to move quicker than finger to override select behaviour
             if (wasTouchEvent(ev) && ev.touches.length === 1 && surpressSingleTouchPan) {
                 // no timer magic in this case, we are not allowed to handle a single touch anyhow
                 showSingleTouchOverlay();
             }
-            else {
+            else if (wasTouchEvent(ev) || hasMousePanOnNoZoomItems) {
                 // prevent text selection never actually wanted in this scenarios
                 ev.preventDefault();
-                Timer50msMouseDownHandle = setTimeout(function () {
-                    //wait 50ms to check if user intention was pan
-                    Timer50msMouseDownHandle = null;
-                    debuglog("initialMovement(50ms)=" + mouse.initialMovement);
-                    if (mouse.initialMovement > 3) {
-                        debuglog("Mouse moved in first 50ms " + (Date.now() - startTime));
-                        // we take control
-                        exports.touchOrMousePanActive = true;
-                        transformRoot.style.cursor = "move"; // only visible in mouse mode
-                    }
-                    else {
-                        // cancel pan, give control back to app
-                        debuglog("Mouse NOT moved in first 50ms " + (Date.now() - startTime));
-                        exports.touchOrMousePanActive = false;
-                        // We possible call a delayed mouse down but the finger or mouse is not down anymore.
-                        if (mouseDownCallback)
-                            mouseDownCallback(ev);
-                    }
-                }, 50);
+                if (timeOut_1) {
+                    Timer50msMouseDownHandle = setTimeout(function () {
+                        //wait 50ms to check if user intention was pan
+                        Timer50msMouseDownHandle = null;
+                        debuglog("initialMovement(" + timeOut_1 + "ms)=" + mouse.initialMovement);
+                        if (mouse.initialMovement > 3) {
+                            debuglog("Mouse moved in first " + timeOut_1 + "ms " + (Date.now() - startTime));
+                            // we take control
+                            touchOrMousePanActive = true;
+                            transformRoot.style.cursor = "move"; // only visible in mouse mode
+                        }
+                        else {
+                            // cancel pan, give control back to app
+                            debuglog("Mouse NOT moved in first " + timeOut_1 + "ms " + (Date.now() - startTime));
+                            touchOrMousePanActive = false;
+                            // We possible call a delayed mouse down but the finger or mouse is not down anymore.
+                            if (mouseDownCallback)
+                                mouseDownCallback(ev);
+                        }
+                    }, timeOut_1);
+                }
+            }
+            else {
+                // cancel pan, give control back to app
+                debuglog("Mouse NOT moved in first " + timeOut_1 + "ms " + (Date.now() - startTime));
+                touchOrMousePanActive = false;
+                // We possible call a delayed mouse down but the finger or mouse is not down anymore.
+                if (mouseDownCallback)
+                    mouseDownCallback(ev);
             }
             if (ev.target.classList.contains("selected")) {
                 // cancel pan if user clicks on an already selected element
@@ -841,7 +888,7 @@ SOFTWARE.
          if (ms <= 50) {
              debuglog("Mouse moved after " + ms + "ms   X=" + (mouse.startScreenX - ev.pageX) + "   Y=" + (mouse.startScreenY - ev.pageY));
          } */
-        if (exports.touchOrMousePanActive) {
+        if (touchOrMousePanActive) {
             //debuglog("ev.buttons === "+ ev.buttons + " transformRoot.style.cursor === "+  transformRoot.style.cursor);
             if (ev.buttons === 1 && transformRoot.style.cursor === "move") {
                 //if (ev.target && isTargetAllowed(ev.target)) {
@@ -868,8 +915,7 @@ SOFTWARE.
         if (ev.touches.length === 1) {
             mouse.initialMovement = Math.abs(mouse.startScreenX - ev.touches[0].pageX) + Math.abs(mouse.startScreenY - ev.touches[0].pageY);
         }
-        if (exports.touchOrMousePanActive || twoFingerTouchActive) {
-            var dist = void 0;
+        if (touchOrMousePanActive || twoFingerTouchActive) {
             ev.preventDefault();
             edgeScrollDirection = edgeScrollDirectionE.none; // safety first
             //root.style.backgroundColor = "rgba(0,255,0,0.2)";
@@ -896,16 +942,16 @@ SOFTWARE.
                     mouse.startModelCenterX = screenToModelX(mouse.startScreenCenterX);
                     mouse.startModelCenterY = screenToModelY(mouse.startScreenCenterY);
                 }
-                var dist_1 = distance(p1.pageX, p1.pageY, pinch.pageX, pinch.pageY);
+                var dist = distance(p1.pageX, p1.pageY, pinch.pageX, pinch.pageY);
                 if (lastDistance && ev.ctrlKey) {
-                    dist_1 = lastDistance;
+                    dist = lastDistance;
                 }
                 else {
-                    lastDistance = dist_1;
+                    lastDistance = dist;
                 }
-                var newZoom = mouse.shiftStartZoom * (dist_1 / mouse.shiftStartDistance);
-                debuglog("shiftStartZoom=" + mouse.shiftStartZoom + " calc zoom=" + (dist_1 / mouse.shiftStartDistance));
-                debuglog("PINCH-Distance:" + mouse.shiftStartDistance + "/" + dist_1 + " z=" + newZoom);
+                var newZoom = mouse.shiftStartZoom * (dist / mouse.shiftStartDistance);
+                debuglog("shiftStartZoom=" + mouse.shiftStartZoom + " calc zoom=" + (dist / mouse.shiftStartDistance));
+                debuglog("PINCH-Distance:" + mouse.shiftStartDistance + "/" + dist + " z=" + newZoom);
                 // same calculation then in "mousePanScroll"
                 var center = {
                     pageX: p1.pageX + (pinch.pageX - p1.pageX),
@@ -923,8 +969,8 @@ SOFTWARE.
                 var p1 = getMouseOrTouchEventPageXYInternal(ev);
                 var p2 = getMouseOrTouchEventPageXYInternal(ev, true);
                 // mouse start zoom for distance
-                var dist_2 = distance(p1.pageX, p1.pageY, p2.pageX, p2.pageY);
-                mouse.newZoom = mouse.startZoom * (dist_2 / mouse.startDistance);
+                var dist = distance(p1.pageX, p1.pageY, p2.pageX, p2.pageY);
+                mouse.newZoom = mouse.startZoom * (dist / mouse.startDistance);
                 // take center of both touches for zoom center / pan offset
                 var center = {
                     pageX: p1.pageX + (p2.pageX - p1.pageX),
@@ -938,7 +984,7 @@ SOFTWARE.
             }
             else if (ev.touches.length > 0) {
                 // if we did not enter pan mode initially, we should not continue now
-                if (exports.touchOrMousePanActive) {
+                if (touchOrMousePanActive) {
                     //   if (ev.target && isTargetAllowed(ev.target)) {
                     mousePanScroll(getMouseOrTouchEventPageXYInternal(ev), ev.touches.length);
                     //  }
@@ -986,9 +1032,9 @@ SOFTWARE.
             return;
         }
         callMouseUpCallBack(ev);
-        if (exports.touchOrMousePanActive) {
+        if (touchOrMousePanActive) {
             transformRoot.style.cursor = "auto";
-            exports.touchOrMousePanActive = false;
+            touchOrMousePanActive = false;
         }
     }
     function callMouseUpCallBack(ev) {
@@ -996,7 +1042,7 @@ SOFTWARE.
         // mouseup after pan or zoom is not what we want, since the users intention was not to click
         //mouse.initialMovement
         if (mouseUpCallback && typeof mouseUpCallback === "function") {
-            if (exports.touchOrMousePanActive) {
+            if (touchOrMousePanActive) {
                 // only call mouseup if no second touch was involved,
                 // we need to send mouse up if no pan or zoom has happend
                 // TODO: find right threshold - 2 seems to be fairly good
@@ -1033,14 +1079,14 @@ SOFTWARE.
                   hintBrowserIfIdle(); */
             }
         }
-        if (exports.touchOrMousePanActive) {
+        if (touchOrMousePanActive) {
             if (ev.touches.length > 0) {
                 // am Besten wir beenden den vorgang und starten im zweifel einen neuen
                 captureFirstTouchOrMouseDown(ev);
             }
             else {
                 callMouseUpCallBack(ev);
-                exports.touchOrMousePanActive = false;
+                touchOrMousePanActive = false;
                 mouse.lastDeltaScreenY = 0;
                 mouse.lastDeltaScreenX = 0;
                 startPanEasing();
@@ -1202,21 +1248,18 @@ SOFTWARE.
         var newZoom = curZoom;
         var modelX = screenToModelX(ev.pageX);
         var modelY = screenToModelY(ev.pageY);
-        if (isTouchPad) {
+        if (isTouchPad && !ev.ctrlKey) {
             //https://stackblitz.com/edit/multi-touch-trackpad-gesture
-            if (ev.ctrlKey) {
-                newZoom = curZoom - ev.deltaY * 0.01;
-            }
-            else {
-                modelX += ev.deltaX * 1.5 / curZoom;
-                modelY += ev.deltaY * 1.5 / curZoom;
-            }
+            modelX += ev.deltaX * 1.5 / curZoom;
+            modelY += ev.deltaY * 1.5 / curZoom;
         }
         else {
             // Just mouse-wheel zoom, no pan;
             var ms = new Date().getMilliseconds() - lastWheelEvent;
             var faktor = (Math.max(Math.min(30, ms), 10) - 10); // 0-20
-            faktor = 1.01 + faktor / 20 * 0.09;
+            faktor /= 20;
+            faktor *= 0.11; // was 0.09;
+            faktor += 1.01;
             lastWheelEvent = new Date().getMilliseconds();
             // delta is extrem device spezifisch und komplett unbrauchbar
             if (ev.deltaY >= 0) {

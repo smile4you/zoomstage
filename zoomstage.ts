@@ -100,7 +100,7 @@ let propagated = {
     curTranslateTop: 0
 };
 
-const bleed = 100;
+let bleed = 100;
 let scrollBarTimeout: any = null;
 
 let touchCount = 0;
@@ -141,6 +141,7 @@ let panAnimationRunning: boolean = false;
 
 let lastWheelEvent = new Date().getMilliseconds();
 let isTouchPad = true; // default!
+let hasMousePanOnNoZoomItems = false; // default!
 let i_am_attached = false;
 
 /*********************** PUBLIC METHODS ******************/
@@ -154,20 +155,32 @@ export interface initProperties {
     scopeName: string,
     mouseDown_Callback: iMouseCallback,
     mouseUp_Callback: iMouseCallback,
-    zoomChanged_Callback: iZoomChangeCallback
+    zoomChanged_Callback: iZoomChangeCallback,
+    bleed: number,
+    edgeScroll: true,
+    mousePanOnNoZoomItems: false
 }
 
 export function init(config: initProperties): boolean {
 
-
     const initialZoom = config.initialZoom || 0;
 
     let skipInitAnimation = false;
-    if (initialZoom === -1 ) {
+    if (initialZoom === -1) {
         skipInitAnimation = true;
     }
 
+    if (config.bleed >= 0 ) {
+        bleed = config.bleed;
+    }
 
+    if ( typeof config.edgeScroll === "boolean") {
+        edgeScroll = config.edgeScroll;
+    }
+
+    if ( typeof config.mousePanOnNoZoomItems === "boolean") {
+        hasMousePanOnNoZoomItems = config.mousePanOnNoZoomItems;
+    }
 
     zoomChangedCallback = config.zoomChanged_Callback;
     mouseUpCallback = config.mouseUp_Callback; // will be fired when no zoom has happend
@@ -179,21 +192,21 @@ export function init(config: initProperties): boolean {
 
 
     if (!app) {
-        throw ("zoomManager: No stage [" + config.stageSelector + "] element found");
+        throw ("zoomstage: No stage [" + config.stageSelector + "] element found");
     }
     if (!transformRoot) {
-        throw ("zoomManager: No content-container [" + config.contentSelector + "] element found");
+        throw ("zoomstage: No content-container [" + config.contentSelector + "] element found");
     }
 
     contentHeight = getContentHeight();
     contentWidth = getContentWidth();
 
     if (!(contentWidth > 0)) {
-        throw ("zoomManager: can't determine content width [" + contentWidth + "] ");
+        throw ("zoomstage: can't determine content width [" + contentWidth + "] ");
     }
 
     if (!(contentHeight > 0)) {
-        throw ("zoomManager: can't determine content height [" + contentHeight + "] ");
+        throw ("zoomstage: can't determine content height [" + contentHeight + "] ");
     }
 
     curZoom = 1;
@@ -356,6 +369,17 @@ export function touchpadOrMouse(newValue?): string {
     }
     if (newValue === "mouse") {
         isTouchPad = false;
+    }
+    return isTouchPad ? "touch" : "mouse";
+
+}
+
+export function mousePanOnNoZoomItems(newValue?): string {
+    if (newValue === "touch") {
+        hasMousePanOnNoZoomItems = true;
+    }
+    if (newValue === "mouse") {
+        hasMousePanOnNoZoomItems = false;
     }
     return isTouchPad ? "touch" : "mouse";
 
@@ -609,26 +633,28 @@ function translateTop(): number {
 }
 
 function appOffsetLeft(): number {
-    return app.offsetLeft;
+    return getElementOffset(app,"offsetLeft");
 }
 
 function appOffsetTop(): number {
-    return app.offsetTop;
+    return getElementOffset(app,"offsetTop");
 }
 
 export function appWidth(): number {
-    return app.offsetWidth;
+    return getElementOffset(app,"offsetWidth");
 }
 
 export function appHeight(): number {
-    return app.offsetHeight;
+    return getElementOffset(app,"offsetHeight");
 }
 
+
+
 export function getContentWidth(): number {
-    let cw =  transformRoot.offsetWidth;
+    let cw = transformRoot.offsetWidth;
     if (!(cw > 0)) {
         if (transformRoot.style.width) {
-            cw = parseInt(transformRoot.style.width.replace("px",""));
+            cw = parseInt(transformRoot.style.width.replace("px", ""));
         }
     }
     return cw;
@@ -638,7 +664,7 @@ export function getContentHeight(): number {
     let ch = transformRoot.offsetHeight;
     if (!(ch > 0)) {
         if (transformRoot.style.height) {
-            ch = parseInt(transformRoot.style.height.replace("px",""));
+            ch = parseInt(transformRoot.style.height.replace("px", ""));
         }
     }
     return ch;
@@ -734,6 +760,27 @@ function hideSingleTouchOverlay() {
     }
 
 }
+
+function getElementOffset(element, property) {
+
+    if (property == "offsetLeft" || property == "offsetTop") {
+        let actualOffset = element[property];
+        let current = element.offsetParent;
+
+        //Look up the node tree to add up all the offset value
+        while (current != null) {
+            actualOffset += current[property];
+            current = current.offsetParent;
+        }
+
+        return actualOffset;
+    } else if (property == "offsetHeight" || property == "offsetWidth") {
+        return element[property];
+    }
+
+    return false;
+}
+
 
 function showScrollBar() {
     if (scrollBarTimeout) {
@@ -851,7 +898,7 @@ function isTargetAllowed(target: any) {
 
  **************************/
 
-export let touchOrMousePanActive = false;
+let touchOrMousePanActive = false;
 let twoFingerTouchActive = false;
 
 
@@ -889,7 +936,7 @@ function onTouchStartOrMouseDown(ev: Event) {
 
     mouse.initialMovement = 0;
 
-    debuglog("ZoomManager onTouchStartOrMouseDown: pageX=" + (<MouseEvent>ev).pageX + "  pageY=" + (<MouseEvent>ev).pageY);
+    debuglog("zoomstage onTouchStartOrMouseDown: pageX=" + (<MouseEvent>ev).pageX + "  pageY=" + (<MouseEvent>ev).pageY);
 
 
     // second finger (or more, but we only look on finger 1+2)
@@ -948,6 +995,7 @@ function onTouchStartOrMouseDown(ev: Event) {
         captureFirstTouchOrMouseDown(ev);
 
         if (mouseDownCallback) mouseDownCallback(ev); // for deselect!!
+
     } else {
 
         // target not allowed (no-zoom), but if finger or mouse moves fast enough the users intention is to pan
@@ -957,35 +1005,46 @@ function onTouchStartOrMouseDown(ev: Event) {
             return;
         }
 
+        let timeOut =  wasTouchEvent(ev) ? 50: 10; // mouse has to move quicker than finger to override select behaviour
 
         if (wasTouchEvent(ev) && (<TouchEvent>ev).touches.length === 1 && surpressSingleTouchPan) {
             // no timer magic in this case, we are not allowed to handle a single touch anyhow
             showSingleTouchOverlay();
 
-        } else {
+        } else if (wasTouchEvent(ev) || hasMousePanOnNoZoomItems) {
             // prevent text selection never actually wanted in this scenarios
             ev.preventDefault();
 
-            Timer50msMouseDownHandle = setTimeout(function () {
-                //wait 50ms to check if user intention was pan
-                Timer50msMouseDownHandle = null;
+            if (timeOut) {
+                Timer50msMouseDownHandle = setTimeout(function () {
+                    //wait 50ms to check if user intention was pan
+                    Timer50msMouseDownHandle = null;
 
-                debuglog("initialMovement(50ms)=" + mouse.initialMovement);
+                    debuglog("initialMovement(" + timeOut + "ms)=" + mouse.initialMovement);
 
-                if (mouse.initialMovement > 3) {
-                    debuglog("Mouse moved in first 50ms " + (Date.now() - startTime));
-                    // we take control
-                    touchOrMousePanActive = true;
-                    transformRoot.style.cursor = "move";    // only visible in mouse mode
-                } else {
-                    // cancel pan, give control back to app
-                    debuglog("Mouse NOT moved in first 50ms " + (Date.now() - startTime));
-                    touchOrMousePanActive = false;
+                    if (mouse.initialMovement > 3) {
+                        debuglog("Mouse moved in first " + timeOut + "ms " + (Date.now() - startTime));
+                        // we take control
+                        touchOrMousePanActive = true;
+                        transformRoot.style.cursor = "move";    // only visible in mouse mode
+                    } else {
+                        // cancel pan, give control back to app
+                        debuglog("Mouse NOT moved in first " + timeOut + "ms " + (Date.now() - startTime));
+                        touchOrMousePanActive = false;
 
-                    // We possible call a delayed mouse down but the finger or mouse is not down anymore.
-                    if (mouseDownCallback) mouseDownCallback(ev)
-                }
-            }, 50);
+                        // We possible call a delayed mouse down but the finger or mouse is not down anymore.
+                        if (mouseDownCallback) mouseDownCallback(ev)
+                    }
+                }, timeOut);
+            }
+        } else {
+
+            // cancel pan, give control back to app
+            debuglog("Mouse NOT moved in first " + timeOut + "ms " + (Date.now() - startTime));
+            touchOrMousePanActive = false;
+
+            // We possible call a delayed mouse down but the finger or mouse is not down anymore.
+            if (mouseDownCallback) mouseDownCallback(ev)
         }
 
 
@@ -1084,7 +1143,7 @@ function onTouchmove(ev: TouchEvent) {
 
     if (touchOrMousePanActive || twoFingerTouchActive) {
 
-        let dist: number;
+
         ev.preventDefault();
         edgeScrollDirection = edgeScrollDirectionE.none; // safety first
         //root.style.backgroundColor = "rgba(0,255,0,0.2)";
@@ -1495,7 +1554,6 @@ function mousePanScroll(p: iPageXY, touches: number, zoom = curZoom) {
 
     setZoomAndScroll(zoom, sX, sY, 0);
 
-
 }
 
 
@@ -1506,15 +1564,11 @@ function onWheel(ev: WheelEvent) {
     let modelX = screenToModelX(ev.pageX);
     let modelY = screenToModelY(ev.pageY);
 
-    if (isTouchPad) {
+    if (isTouchPad && !ev.ctrlKey) {
         //https://stackblitz.com/edit/multi-touch-trackpad-gesture
 
-        if (ev.ctrlKey) {
-            newZoom = curZoom - ev.deltaY * 0.01;
-        } else {
-            modelX += ev.deltaX * 1.5 / curZoom;
-            modelY += ev.deltaY * 1.5 / curZoom;
-        }
+        modelX += ev.deltaX * 1.5 / curZoom;
+        modelY += ev.deltaY * 1.5 / curZoom;
 
     } else {
         // Just mouse-wheel zoom, no pan;
@@ -1522,8 +1576,9 @@ function onWheel(ev: WheelEvent) {
         let ms = new Date().getMilliseconds() - lastWheelEvent;
 
         let faktor = (Math.max(Math.min(30, ms), 10) - 10); // 0-20
-
-        faktor = 1.01 + faktor / 20 * 0.09;
+        faktor /= 20;
+        faktor *= 0.11; // was 0.09;
+        faktor += 1.01;
 
         lastWheelEvent = new Date().getMilliseconds();
 
