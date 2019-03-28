@@ -35,6 +35,9 @@
         initialZoom: 0,
         minZoom: 0,
         maxZoom: 0,
+        bleed: 40,
+        edgeScroll: true,
+        mousePanOnNoZoomItems: false,
         mouseDown_Callback: function (ev) {
             var div = ev.target;
             deselect(); // always deselect

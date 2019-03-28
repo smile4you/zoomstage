@@ -60,6 +60,9 @@ let mouse = {
     startDistance: 0,
     shiftStartDistance: 0,
 
+    startScrollbarTop: 0,
+    startScrollbarLeft: 0
+
 };
 
 
@@ -71,6 +74,12 @@ enum edgeScrollDirectionE {
     none = "none"
 }
 
+enum scrollBarDragE {
+    none = "none",
+    horizontal = "horizontal",
+    vertical = "vertical"
+}
+
 let mouseUpCallback: iMouseCallback = null;
 let mouseDownCallback: iMouseCallback = null;
 let zoomChangedCallback: iZoomChangeCallback = null;
@@ -79,6 +88,8 @@ let transformRoot: HTMLDivElement; // mindmap
 let app: HTMLDivElement;  // app-div
 let scrollV: HTMLDivElement = generateVerticalScrollerDiv();
 let scrollH: HTMLDivElement = generateHorizontalScrollerDiv();
+let scrollAreaV: HTMLDivElement = generateVerticalScrollAreaDiv();
+let scrollAreaH: HTMLDivElement = generateHorizontalScrollAreaDiv();
 let singleTouchOverlay = generateSingleTouchOverlayDiv();
 let contentWidth: number, contentHeight: number;
 let curZoom: number = 1;
@@ -163,6 +174,11 @@ export interface initProperties {
 
 export function init(config: initProperties): boolean {
 
+    if (i_am_attached) {
+        console.error("Zoomstage is already attached to", app);
+        return false;
+    }
+
     const initialZoom = config.initialZoom || 0;
 
     let skipInitAnimation = false;
@@ -170,15 +186,15 @@ export function init(config: initProperties): boolean {
         skipInitAnimation = true;
     }
 
-    if (config.bleed >= 0 ) {
+    if (config.bleed >= 0) {
         bleed = config.bleed;
     }
 
-    if ( typeof config.edgeScroll === "boolean") {
+    if (typeof config.edgeScroll === "boolean") {
         edgeScroll = config.edgeScroll;
     }
 
-    if ( typeof config.mousePanOnNoZoomItems === "boolean") {
+    if (typeof config.mousePanOnNoZoomItems === "boolean") {
         hasMousePanOnNoZoomItems = config.mousePanOnNoZoomItems;
     }
 
@@ -252,52 +268,59 @@ export function init(config: initProperties): boolean {
 export function attach() {
 
     if (!i_am_attached) {
-        i_am_attached = true;
-
-        //  alert("attach zoom-manager:" + eZoomMode[mode] + "(" + mode + ")" );
-
-        let scope = app;
-
-        const evp: any = {passive: false, capture: false};
-        scope.addEventListener("touchstart", onTouchStartOrMouseDown, evp);
-        scope.addEventListener("touchmove", onTouchmove, evp);
-        scope.addEventListener("touchend", onTouchend, evp);
-        scope.addEventListener("touchcancel", onTouchend, evp);
-        scope.addEventListener("wheel", onWheel);
-        scope.addEventListener("mousemove", onMousemove, evp);
-        scope.addEventListener("mouseup", onMouseup, evp);
-        scope.addEventListener("mousedown", onTouchStartOrMouseDown, evp);
-        /*
-         *  Gesture Support - SAFARI on MacOs only
-         */
-        scope.addEventListener('gesturestart', onGestureStart, false);
-        scope.addEventListener('gesturechange', onGestureChange, false);
-        scope.addEventListener('gestureend', onGestureEnd, false);
-
-        scope.appendChild(scrollV);
-        scope.appendChild(scrollH);
-        scope.appendChild(singleTouchOverlay);
-
-        //recallZoomAndPan();
-
-        // start the endless render loop
-        propagateZoomAndPan();
-
-        // setZoom(3, 0, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
-
-        // after the center animation finishes
-
-        /* setTimeout(function() {
-             setZoom(1, 1, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
-
-             //   center();
-
-             // initially, we need to remove hint, after the scale gets applied with requestRenderFrame
-
-
-       //  }, 300);*/
-
+        detach();
     }
+    i_am_attached = true;
+    //  alert("attach zoom-manager:" + eZoomMode[mode] + "(" + mode + ")" );
+
+    let scope = app;
+
+    const evp: any = {passive: false, capture: false};
+    scope.addEventListener("touchstart", onTouchStartOrMouseDown, evp);
+    scope.addEventListener("touchmove", onTouchmove, evp);
+    scope.addEventListener("touchend", onTouchend, evp);
+    scope.addEventListener("touchcancel", onTouchend, evp);
+    scope.addEventListener("wheel", onWheel);
+    scope.addEventListener("mousemove", onMousemove, evp);
+    scope.addEventListener("mouseup", onMouseup, evp);
+    scope.addEventListener("mousedown", onTouchStartOrMouseDown, evp);
+    /*
+     *  Gesture Support - SAFARI on MacOs only
+     */
+    scope.addEventListener('gesturestart', onGestureStart, false);
+    scope.addEventListener('gesturechange', onGestureChange, false);
+    scope.addEventListener('gestureend', onGestureEnd, false);
+
+    scope.appendChild(scrollAreaV);
+    scope.appendChild(scrollAreaH);
+    scrollAreaV.addEventListener('mousedown', onVerticalScrollAreaDown);
+    scrollAreaH.addEventListener('mousedown', onHorizontalScrollAreaDown);
+
+
+    scope.appendChild(scrollV);
+    scope.appendChild(scrollH);
+    scope.appendChild(singleTouchOverlay);
+
+    //recallZoomAndPan();
+
+    // start the endless render loop
+    propagateZoomAndPan();
+
+    // setZoom(3, 0, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
+
+    // after the center animation finishes
+
+    /* setTimeout(function() {
+         setZoom(1, 1, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
+
+         //   center();
+
+         // initially, we need to remove hint, after the scale gets applied with requestRenderFrame
+
+
+   //  }, 300);*/
+
+
 }
 
 
@@ -362,6 +385,7 @@ export function screenMapCenter(): iPageXY {
 export function zoomFactor() {
     return curZoom;
 }
+
 
 export function touchpadOrMouse(newValue?): string {
     if (newValue === "touch") {
@@ -490,7 +514,7 @@ function generateHorizontalScrollerDiv() {
     const scrollH = generateScrollerDiv();
     scrollH.style.height = "6px";
     scrollH.style.width = "100px";
-    scrollH.style.bottom = "2px";
+    scrollH.style.bottom = "6px";
     scrollH.style.left = "10%";
     return scrollH;
 }
@@ -499,7 +523,7 @@ function generateVerticalScrollerDiv() {
     const scrollV = generateScrollerDiv();
     scrollV.style.height = "100px";
     scrollV.style.width = "6px";
-    scrollV.style.right = "2px";
+    scrollV.style.right = "6px";
     scrollV.style.top = "10%";
     return scrollV;
 }
@@ -511,6 +535,34 @@ function generateScrollerDiv() {
     scroll.style.border = "1px rgba(255,255,255,0.7) solid";
     scroll.style.position = "absolute";
     scroll.style.display = "none";
+    scroll.style.cursor = "pointer";
+    scroll.style.pointerEvents = "none";
+    return scroll;
+}
+
+
+function generateHorizontalScrollAreaDiv() {
+    const scrollH = generateScrollAreaDiv();
+    scrollH.style.height = "15px";
+    scrollH.style.right = "0";
+    scrollH.style.bottom = "0";
+    scrollH.style.left = "0";
+    return scrollH;
+}
+
+function generateVerticalScrollAreaDiv() {
+    const scrollV = generateScrollAreaDiv();
+    scrollV.style.width = "15px";
+    scrollV.style.right = "0";
+    scrollV.style.top = "0";
+    scrollV.style.bottom = "0";
+    return scrollV;
+}
+
+function generateScrollAreaDiv() {
+    const scroll = document.createElement("div");
+    scroll.style.position = "absolute";
+    scroll.style.cursor = "pointer";
     return scroll;
 }
 
@@ -623,31 +675,30 @@ function removeHint() {
     }
 }
 
-
-function translateLeft(): number {
+//TODO: remove export
+export function translateLeft(): number {
     return curTranslateLeft;
 }
-
-function translateTop(): number {
+//TODO: remove export
+export  function translateTop(): number {
     return curTranslateTop;
 }
 
 function appOffsetLeft(): number {
-    return getElementOffset(app,"offsetLeft");
+    return getElementOffset(app, "offsetLeft");
 }
 
 function appOffsetTop(): number {
-    return getElementOffset(app,"offsetTop");
+    return getElementOffset(app, "offsetTop");
 }
 
 export function appWidth(): number {
-    return getElementOffset(app,"offsetWidth");
+    return getElementOffset(app, "offsetWidth");
 }
 
 export function appHeight(): number {
-    return getElementOffset(app,"offsetHeight");
+    return getElementOffset(app, "offsetHeight");
 }
-
 
 
 export function getContentWidth(): number {
@@ -800,7 +851,7 @@ function showScrollBar() {
 
     let t = Math.max(0, (curTranslateTop / maxScrollY()) * (aH - h));
     scrollV.style.top = (t + 2) + "px";
-    scrollV.style.height = Math.min(aH - 15 - t, h) + "px";  //-12 prevents scrollbar from crossing
+    scrollV.style.height = Math.min(aH - 19 - t, h) + "px";  //-12 prevents scrollbar from crossing
 
 
     let w = aW / (sW * curZoom) * aW;
@@ -809,13 +860,74 @@ function showScrollBar() {
 
     let l = Math.max(0, (curTranslateLeft / maxScrollX()) * (aW - w));
     scrollH.style.left = (l + 2) + "px";
-    scrollH.style.width = Math.min(aW - 15 - l, w) + "px";
+    scrollH.style.width = Math.min(aW - 19 - l, w) + "px";
 
     scrollBarTimeout = setTimeout(function () {
         scrollV.style.display = "none";
         scrollH.style.display = "none";
         userInteractionCompleted();
     }, 500); // looks weird with mouse wheel otherwise
+}
+
+function onVerticalScrollAreaDown(ev: MouseEvent) {
+    ev.preventDefault();
+    const p = getMouseOrTouchEventPageXYInternal(ev);
+
+    const sTop = getPixelNumber(scrollV.style.top);
+    const sHeight = getPixelNumber(scrollV.style.height);
+    let step =  (curZoom * contentHeight)  / (appHeight() / sHeight) ;
+    step = step / curZoom * 0.85;
+    if (p.pageY - appOffsetTop() < sTop) {
+        setZoomAndScroll(curZoom, curTranslateLeft, curTranslateTop - step, 0.4);
+    }
+    else if (p.pageY - appOffsetTop() > sTop + sHeight) {
+        setZoomAndScroll(curZoom, curTranslateLeft, curTranslateTop + step, 0.4);
+    } else {
+        // click on scroller
+
+        app.style.cursor = "pointer";
+        scrollBarDragActive = scrollBarDragE.vertical;
+        captureFirstTouchOrMouseDown(ev);
+
+
+    }
+    showScrollBar();
+}
+
+function onHorizontalScrollAreaDown(ev: MouseEvent) {
+    ev.preventDefault();
+    const p = getMouseOrTouchEventPageXYInternal(ev);
+
+    const sLeft = getPixelNumber(scrollH.style.left);
+    const sWidth = getPixelNumber(scrollH.style.width);
+    let step = (curZoom * contentWidth)  / (appWidth() / sWidth) ;
+    step = step / curZoom * 0.85;
+    if (p.pageX - appOffsetLeft() < sLeft) {
+        setZoomAndScroll(curZoom, curTranslateLeft - step, curTranslateTop, 0.4);
+    }
+    else if (p.pageX - appOffsetLeft() > sLeft + sWidth) {
+        setZoomAndScroll(curZoom, curTranslateLeft + step, curTranslateTop, 0.4);
+    } else {
+        // click on scroller
+
+        scrollBarDragActive = scrollBarDragE.horizontal;
+        app.style.cursor = "pointer";
+        captureFirstTouchOrMouseDown(ev);
+
+
+    }
+    showScrollBar();
+}
+
+function getPixelNumber(x: string): number {
+    if (x && typeof x === "string") {
+        x = x.replace("px", "");
+    }
+    if (x) {
+        return parseInt(x);
+    } else {
+        return 0;
+    }
 }
 
 function saveScrollPosition() {
@@ -828,20 +940,22 @@ function saveScrollPosition() {
     window.localStorage.setItem("view" + contextId, JSON.stringify(view));
 }
 
-export function recallZoomAndPan(): boolean {
+export function recallZoomAndPan(scopeName: string =null, animationSeconds: number =0.0): boolean {
+    if (scopeName) {
+        contextId = scopeName;
+    }
+
     let view: iView;
     let s = window.localStorage.getItem("view" + contextId);
     if (s) {
         view = JSON.parse(s);
         if (view && view.zoom > 0) {
-            setZoomAndScroll(view.zoom, view.modelX, view.modelY, 0.5, true);
+            setZoomAndScroll(view.zoom, view.modelX, view.modelY, animationSeconds, true);
             userInteractionCompleted();
             return true;
         }
     }
-    setZoom(1.0, 0, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
-    userInteractionCompleted();
-    return true;
+    return false;
 }
 
 
@@ -899,6 +1013,7 @@ function isTargetAllowed(target: any) {
  **************************/
 
 let touchOrMousePanActive = false;
+let scrollBarDragActive: scrollBarDragE = scrollBarDragE.none;
 let twoFingerTouchActive = false;
 
 
@@ -938,10 +1053,23 @@ function onTouchStartOrMouseDown(ev: Event) {
 
     debuglog("zoomstage onTouchStartOrMouseDown: pageX=" + (<MouseEvent>ev).pageX + "  pageY=" + (<MouseEvent>ev).pageY);
 
+    if (!wasTouchEvent(ev) && mouseInScrollBarArea((<MouseEvent>ev).pageX, (<MouseEvent>ev).pageY)) {
+        // mouse over scroll bar, skip mouse/touch handling
 
-    // second finger (or more, but we only look on finger 1+2)
-    // we look always for it, to execute pinch-zoom
-    if (touchCount > 0 && wasTouchEvent(ev) && (<TouchEvent>ev).touches.length > 1) {
+
+        // check of scrollbar hit
+        /* if (ev.target === scrollH) {
+             scrollBarDragActive = scrollBarDragE.horizontal;
+             app.style.cursor = "pointer";
+             captureFirstTouchOrMouseDown(ev);
+         } else if (ev.target === scrollV) {
+             scrollBarDragActive = scrollBarDragE.vertical;
+             captureFirstTouchOrMouseDown(ev);
+         }*/
+
+        // second finger (or more, but we only look on finger 1+2)
+        // we look always for it, to execute pinch-zoom
+    } else if (touchCount > 0 && wasTouchEvent(ev) && (<TouchEvent>ev).touches.length > 1) {
         hideSingleTouchOverlay();
         hintBrowser();
         // *** second finger coming ***
@@ -1005,7 +1133,7 @@ function onTouchStartOrMouseDown(ev: Event) {
             return;
         }
 
-        let timeOut =  wasTouchEvent(ev) ? 50: 10; // mouse has to move quicker than finger to override select behaviour
+        let timeOut = wasTouchEvent(ev) ? 50 : 10; // mouse has to move quicker than finger to override select behaviour
 
         if (wasTouchEvent(ev) && (<TouchEvent>ev).touches.length === 1 && surpressSingleTouchPan) {
             // no timer magic in this case, we are not allowed to handle a single touch anyhow
@@ -1121,8 +1249,31 @@ function onMousemove(ev: MouseEvent) {
             //}
         }
     } else if (ev.buttons === 1) {
-        // propably a user drag and drop
-        setEdgeScrollDirection(ev.pageX, ev.pageY);
+        if (scrollBarDragActive === scrollBarDragE.horizontal) {
+
+            ev.preventDefault();
+            const cW = contentWidth + 2 * bleed;
+            const factor = (cW * curZoom) / appWidth();
+            // console.log(" mouse.startModelXOffset = "+  mouse.startModelXOffset + " ev.pageX=" +ev.pageX+ " mouse.startScreenX="+ mouse.startScreenX + "    curZoom=" + curZoom + "   (ev.pageX- mouse.startScreenX) / curZoom = " + (ev.pageX- mouse.startScreenX) / curZoom )
+            setZoomAndScroll(curZoom, mouse.startModelXOffset + ((ev.pageX - mouse.startScreenX) / curZoom * factor), curTranslateTop, 0);
+            showScrollBar();
+
+        } else if (scrollBarDragActive === scrollBarDragE.vertical) {
+
+            ev.preventDefault();
+            const cH = contentHeight + 2 * bleed;
+            const factor = (cH * curZoom) / appHeight();
+            setZoomAndScroll(curZoom, curTranslateLeft, mouse.startModelYOffset + ((ev.pageY - mouse.startScreenY) / curZoom * factor), 0);
+            showScrollBar();
+
+        } else {
+            // propably a user drag and drop
+            setEdgeScrollDirection(ev.pageX, ev.pageY);
+        }
+
+    } else if (mouseInScrollBarArea(ev.pageX, ev.pageY)) {
+        // check if mouse is in scrollbar area
+        showScrollBar();
     }
 }
 
@@ -1276,6 +1427,21 @@ function setEdgeScrollDirection(x: number, y: number) {
     //console.log("EDGE=" + edgeScrollDirection);
 }
 
+function mouseInScrollBarArea(x: number, y: number) {
+
+
+    if (x > appOffsetLeft() + appWidth() - 20 && x <= appOffsetLeft() + appWidth()) {
+        return true;
+    } else if (y > appOffsetTop() + appHeight() - 20 && y <= appOffsetTop() + appHeight()) {
+
+        return true;
+    } else {
+        // nothing
+        return false;
+    }
+
+}
+
 function onMouseup(ev: MouseEvent) {
 
     if (Timer50msMouseDownHandle) {
@@ -1286,7 +1452,12 @@ function onMouseup(ev: MouseEvent) {
         return;
     }
 
-    callMouseUpCallBack(ev);
+    if (scrollBarDragActive !== scrollBarDragE.none) {
+        scrollBarDragActive = scrollBarDragE.none;
+    } else {
+        callMouseUpCallBack(ev);
+    }
+
 
     if (touchOrMousePanActive) {
         transformRoot.style.cursor = "auto";

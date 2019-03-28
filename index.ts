@@ -34,6 +34,9 @@ zoomstage.init({
     initialZoom:0,
     minZoom:0,
     maxZoom:0,
+    bleed: 40,
+    edgeScroll:true,
+    mousePanOnNoZoomItems: false,
     mouseDown_Callback: function (ev: Event) {
         var div = <HTMLDivElement>ev.target;
         deselect(); // always deselect

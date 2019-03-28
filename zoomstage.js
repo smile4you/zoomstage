@@ -54,6 +54,8 @@ SOFTWARE.
         newZoom: 0,
         startDistance: 0,
         shiftStartDistance: 0,
+        startScrollbarTop: 0,
+        startScrollbarLeft: 0
     };
     var edgeScrollDirectionE;
     (function (edgeScrollDirectionE) {
@@ -63,6 +65,12 @@ SOFTWARE.
         edgeScrollDirectionE["right"] = "right";
         edgeScrollDirectionE["none"] = "none";
     })(edgeScrollDirectionE || (edgeScrollDirectionE = {}));
+    var scrollBarDragE;
+    (function (scrollBarDragE) {
+        scrollBarDragE["none"] = "none";
+        scrollBarDragE["horizontal"] = "horizontal";
+        scrollBarDragE["vertical"] = "vertical";
+    })(scrollBarDragE || (scrollBarDragE = {}));
     var mouseUpCallback = null;
     var mouseDownCallback = null;
     var zoomChangedCallback = null;
@@ -71,6 +79,8 @@ SOFTWARE.
     var app; // app-div
     var scrollV = generateVerticalScrollerDiv();
     var scrollH = generateHorizontalScrollerDiv();
+    var scrollAreaV = generateVerticalScrollAreaDiv();
+    var scrollAreaH = generateHorizontalScrollAreaDiv();
     var singleTouchOverlay = generateSingleTouchOverlayDiv();
     var contentWidth, contentHeight;
     var curZoom = 1;
@@ -115,6 +125,10 @@ SOFTWARE.
     var hasMousePanOnNoZoomItems = false; // default!
     var i_am_attached = false;
     function init(config) {
+        if (i_am_attached) {
+            console.error("Zoomstage is already attached to", app);
+            return false;
+        }
         var initialZoom = config.initialZoom || 0;
         var skipInitAnimation = false;
         if (initialZoom === -1) {
@@ -182,42 +196,47 @@ SOFTWARE.
     exports.init = init;
     function attach() {
         if (!i_am_attached) {
-            i_am_attached = true;
-            //  alert("attach zoom-manager:" + eZoomMode[mode] + "(" + mode + ")" );
-            var scope = app;
-            var evp = { passive: false, capture: false };
-            scope.addEventListener("touchstart", onTouchStartOrMouseDown, evp);
-            scope.addEventListener("touchmove", onTouchmove, evp);
-            scope.addEventListener("touchend", onTouchend, evp);
-            scope.addEventListener("touchcancel", onTouchend, evp);
-            scope.addEventListener("wheel", onWheel);
-            scope.addEventListener("mousemove", onMousemove, evp);
-            scope.addEventListener("mouseup", onMouseup, evp);
-            scope.addEventListener("mousedown", onTouchStartOrMouseDown, evp);
-            /*
-             *  Gesture Support - SAFARI on MacOs only
-             */
-            scope.addEventListener('gesturestart', onGestureStart, false);
-            scope.addEventListener('gesturechange', onGestureChange, false);
-            scope.addEventListener('gestureend', onGestureEnd, false);
-            scope.appendChild(scrollV);
-            scope.appendChild(scrollH);
-            scope.appendChild(singleTouchOverlay);
-            //recallZoomAndPan();
-            // start the endless render loop
-            propagateZoomAndPan();
-            // setZoom(3, 0, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
-            // after the center animation finishes
-            /* setTimeout(function() {
-                 setZoom(1, 1, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
-    
-                 //   center();
-    
-                 // initially, we need to remove hint, after the scale gets applied with requestRenderFrame
-    
-    
-           //  }, 300);*/
+            detach();
         }
+        i_am_attached = true;
+        //  alert("attach zoom-manager:" + eZoomMode[mode] + "(" + mode + ")" );
+        var scope = app;
+        var evp = { passive: false, capture: false };
+        scope.addEventListener("touchstart", onTouchStartOrMouseDown, evp);
+        scope.addEventListener("touchmove", onTouchmove, evp);
+        scope.addEventListener("touchend", onTouchend, evp);
+        scope.addEventListener("touchcancel", onTouchend, evp);
+        scope.addEventListener("wheel", onWheel);
+        scope.addEventListener("mousemove", onMousemove, evp);
+        scope.addEventListener("mouseup", onMouseup, evp);
+        scope.addEventListener("mousedown", onTouchStartOrMouseDown, evp);
+        /*
+         *  Gesture Support - SAFARI on MacOs only
+         */
+        scope.addEventListener('gesturestart', onGestureStart, false);
+        scope.addEventListener('gesturechange', onGestureChange, false);
+        scope.addEventListener('gestureend', onGestureEnd, false);
+        scope.appendChild(scrollAreaV);
+        scope.appendChild(scrollAreaH);
+        scrollAreaV.addEventListener('mousedown', onVerticalScrollAreaDown);
+        scrollAreaH.addEventListener('mousedown', onHorizontalScrollAreaDown);
+        scope.appendChild(scrollV);
+        scope.appendChild(scrollH);
+        scope.appendChild(singleTouchOverlay);
+        //recallZoomAndPan();
+        // start the endless render loop
+        propagateZoomAndPan();
+        // setZoom(3, 0, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
+        // after the center animation finishes
+        /* setTimeout(function() {
+             setZoom(1, 1, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
+    
+             //   center();
+    
+             // initially, we need to remove hint, after the scale gets applied with requestRenderFrame
+    
+    
+       //  }, 300);*/
     }
     exports.attach = attach;
     function detach() {
@@ -379,7 +398,7 @@ SOFTWARE.
         var scrollH = generateScrollerDiv();
         scrollH.style.height = "6px";
         scrollH.style.width = "100px";
-        scrollH.style.bottom = "2px";
+        scrollH.style.bottom = "6px";
         scrollH.style.left = "10%";
         return scrollH;
     }
@@ -387,7 +406,7 @@ SOFTWARE.
         var scrollV = generateScrollerDiv();
         scrollV.style.height = "100px";
         scrollV.style.width = "6px";
-        scrollV.style.right = "2px";
+        scrollV.style.right = "6px";
         scrollV.style.top = "10%";
         return scrollV;
     }
@@ -398,6 +417,30 @@ SOFTWARE.
         scroll.style.border = "1px rgba(255,255,255,0.7) solid";
         scroll.style.position = "absolute";
         scroll.style.display = "none";
+        scroll.style.cursor = "pointer";
+        scroll.style.pointerEvents = "none";
+        return scroll;
+    }
+    function generateHorizontalScrollAreaDiv() {
+        var scrollH = generateScrollAreaDiv();
+        scrollH.style.height = "15px";
+        scrollH.style.right = "0";
+        scrollH.style.bottom = "0";
+        scrollH.style.left = "0";
+        return scrollH;
+    }
+    function generateVerticalScrollAreaDiv() {
+        var scrollV = generateScrollAreaDiv();
+        scrollV.style.width = "15px";
+        scrollV.style.right = "0";
+        scrollV.style.top = "0";
+        scrollV.style.bottom = "0";
+        return scrollV;
+    }
+    function generateScrollAreaDiv() {
+        var scroll = document.createElement("div");
+        scroll.style.position = "absolute";
+        scroll.style.cursor = "pointer";
         return scroll;
     }
     function propagateZoomAndPan() {
@@ -495,12 +538,16 @@ SOFTWARE.
             }
         }
     }
+    //TODO: remove export
     function translateLeft() {
         return curTranslateLeft;
     }
+    exports.translateLeft = translateLeft;
+    //TODO: remove export
     function translateTop() {
         return curTranslateTop;
     }
+    exports.translateTop = translateTop;
     function appOffsetLeft() {
         return getElementOffset(app, "offsetLeft");
     }
@@ -640,7 +687,7 @@ SOFTWARE.
             h = aH;
         var t = Math.max(0, (curTranslateTop / maxScrollY()) * (aH - h));
         scrollV.style.top = (t + 2) + "px";
-        scrollV.style.height = Math.min(aH - 15 - t, h) + "px"; //-12 prevents scrollbar from crossing
+        scrollV.style.height = Math.min(aH - 19 - t, h) + "px"; //-12 prevents scrollbar from crossing
         var w = aW / (sW * curZoom) * aW;
         if (w < 50)
             w = 50;
@@ -648,12 +695,65 @@ SOFTWARE.
             w = aW;
         var l = Math.max(0, (curTranslateLeft / maxScrollX()) * (aW - w));
         scrollH.style.left = (l + 2) + "px";
-        scrollH.style.width = Math.min(aW - 15 - l, w) + "px";
+        scrollH.style.width = Math.min(aW - 19 - l, w) + "px";
         scrollBarTimeout = setTimeout(function () {
             scrollV.style.display = "none";
             scrollH.style.display = "none";
             userInteractionCompleted();
         }, 500); // looks weird with mouse wheel otherwise
+    }
+    function onVerticalScrollAreaDown(ev) {
+        ev.preventDefault();
+        var p = getMouseOrTouchEventPageXYInternal(ev);
+        var sTop = getPixelNumber(scrollV.style.top);
+        var sHeight = getPixelNumber(scrollV.style.height);
+        var step = (curZoom * contentHeight) / (appHeight() / sHeight);
+        step = step / curZoom * 0.85;
+        if (p.pageY - appOffsetTop() < sTop) {
+            setZoomAndScroll(curZoom, curTranslateLeft, curTranslateTop - step, 0.4);
+        }
+        else if (p.pageY - appOffsetTop() > sTop + sHeight) {
+            setZoomAndScroll(curZoom, curTranslateLeft, curTranslateTop + step, 0.4);
+        }
+        else {
+            // click on scroller
+            app.style.cursor = "pointer";
+            scrollBarDragActive = scrollBarDragE.vertical;
+            captureFirstTouchOrMouseDown(ev);
+        }
+        showScrollBar();
+    }
+    function onHorizontalScrollAreaDown(ev) {
+        ev.preventDefault();
+        var p = getMouseOrTouchEventPageXYInternal(ev);
+        var sLeft = getPixelNumber(scrollH.style.left);
+        var sWidth = getPixelNumber(scrollH.style.width);
+        var step = (curZoom * contentWidth) / (appWidth() / sWidth);
+        step = step / curZoom * 0.85;
+        if (p.pageX - appOffsetLeft() < sLeft) {
+            setZoomAndScroll(curZoom, curTranslateLeft - step, curTranslateTop, 0.4);
+        }
+        else if (p.pageX - appOffsetLeft() > sLeft + sWidth) {
+            setZoomAndScroll(curZoom, curTranslateLeft + step, curTranslateTop, 0.4);
+        }
+        else {
+            // click on scroller
+            scrollBarDragActive = scrollBarDragE.horizontal;
+            app.style.cursor = "pointer";
+            captureFirstTouchOrMouseDown(ev);
+        }
+        showScrollBar();
+    }
+    function getPixelNumber(x) {
+        if (x && typeof x === "string") {
+            x = x.replace("px", "");
+        }
+        if (x) {
+            return parseInt(x);
+        }
+        else {
+            return 0;
+        }
     }
     function saveScrollPosition() {
         var view = {
@@ -664,20 +764,23 @@ SOFTWARE.
         };
         window.localStorage.setItem("view" + contextId, JSON.stringify(view));
     }
-    function recallZoomAndPan() {
+    function recallZoomAndPan(scopeName, animationSeconds) {
+        if (scopeName === void 0) { scopeName = null; }
+        if (animationSeconds === void 0) { animationSeconds = 0.0; }
+        if (scopeName) {
+            contextId = scopeName;
+        }
         var view;
         var s = window.localStorage.getItem("view" + contextId);
         if (s) {
             view = JSON.parse(s);
             if (view && view.zoom > 0) {
-                setZoomAndScroll(view.zoom, view.modelX, view.modelY, 0.5, true);
+                setZoomAndScroll(view.zoom, view.modelX, view.modelY, animationSeconds, true);
                 userInteractionCompleted();
                 return true;
             }
         }
-        setZoom(1.0, 0, contentWidth / 2, contentHeight / 2, undefined, undefined, true);
-        userInteractionCompleted();
-        return true;
+        return false;
     }
     exports.recallZoomAndPan = recallZoomAndPan;
     function setZoomCss() {
@@ -727,6 +830,7 @@ SOFTWARE.
     
      **************************/
     var touchOrMousePanActive = false;
+    var scrollBarDragActive = scrollBarDragE.none;
     var twoFingerTouchActive = false;
     var startTime = null;
     var Timer50msMouseDownHandle = null;
@@ -756,9 +860,21 @@ SOFTWARE.
         panAnimationRunning = false;
         mouse.initialMovement = 0;
         debuglog("zoomstage onTouchStartOrMouseDown: pageX=" + ev.pageX + "  pageY=" + ev.pageY);
-        // second finger (or more, but we only look on finger 1+2)
-        // we look always for it, to execute pinch-zoom
-        if (touchCount > 0 && wasTouchEvent(ev) && ev.touches.length > 1) {
+        if (!wasTouchEvent(ev) && mouseInScrollBarArea(ev.pageX, ev.pageY)) {
+            // mouse over scroll bar, skip mouse/touch handling
+            // check of scrollbar hit
+            /* if (ev.target === scrollH) {
+                 scrollBarDragActive = scrollBarDragE.horizontal;
+                 app.style.cursor = "pointer";
+                 captureFirstTouchOrMouseDown(ev);
+             } else if (ev.target === scrollV) {
+                 scrollBarDragActive = scrollBarDragE.vertical;
+                 captureFirstTouchOrMouseDown(ev);
+             }*/
+            // second finger (or more, but we only look on finger 1+2)
+            // we look always for it, to execute pinch-zoom
+        }
+        else if (touchCount > 0 && wasTouchEvent(ev) && ev.touches.length > 1) {
             hideSingleTouchOverlay();
             hintBrowser();
             // *** second finger coming ***
@@ -900,8 +1016,29 @@ SOFTWARE.
             }
         }
         else if (ev.buttons === 1) {
-            // propably a user drag and drop
-            setEdgeScrollDirection(ev.pageX, ev.pageY);
+            if (scrollBarDragActive === scrollBarDragE.horizontal) {
+                ev.preventDefault();
+                var cW = contentWidth + 2 * bleed;
+                var factor = (cW * curZoom) / appWidth();
+                // console.log(" mouse.startModelXOffset = "+  mouse.startModelXOffset + " ev.pageX=" +ev.pageX+ " mouse.startScreenX="+ mouse.startScreenX + "    curZoom=" + curZoom + "   (ev.pageX- mouse.startScreenX) / curZoom = " + (ev.pageX- mouse.startScreenX) / curZoom )
+                setZoomAndScroll(curZoom, mouse.startModelXOffset + ((ev.pageX - mouse.startScreenX) / curZoom * factor), curTranslateTop, 0);
+                showScrollBar();
+            }
+            else if (scrollBarDragActive === scrollBarDragE.vertical) {
+                ev.preventDefault();
+                var cH = contentHeight + 2 * bleed;
+                var factor = (cH * curZoom) / appHeight();
+                setZoomAndScroll(curZoom, curTranslateLeft, mouse.startModelYOffset + ((ev.pageY - mouse.startScreenY) / curZoom * factor), 0);
+                showScrollBar();
+            }
+            else {
+                // propably a user drag and drop
+                setEdgeScrollDirection(ev.pageX, ev.pageY);
+            }
+        }
+        else if (mouseInScrollBarArea(ev.pageX, ev.pageY)) {
+            // check if mouse is in scrollbar area
+            showScrollBar();
         }
     }
     var pinch = {
@@ -1024,6 +1161,18 @@ SOFTWARE.
         }
         //console.log("EDGE=" + edgeScrollDirection);
     }
+    function mouseInScrollBarArea(x, y) {
+        if (x > appOffsetLeft() + appWidth() - 20 && x <= appOffsetLeft() + appWidth()) {
+            return true;
+        }
+        else if (y > appOffsetTop() + appHeight() - 20 && y <= appOffsetTop() + appHeight()) {
+            return true;
+        }
+        else {
+            // nothing
+            return false;
+        }
+    }
     function onMouseup(ev) {
         if (Timer50msMouseDownHandle) {
             clearTimeout(Timer50msMouseDownHandle);
@@ -1031,7 +1180,12 @@ SOFTWARE.
         if (isTargetInputElement(ev.target)) {
             return;
         }
-        callMouseUpCallBack(ev);
+        if (scrollBarDragActive !== scrollBarDragE.none) {
+            scrollBarDragActive = scrollBarDragE.none;
+        }
+        else {
+            callMouseUpCallBack(ev);
+        }
         if (touchOrMousePanActive) {
             transformRoot.style.cursor = "auto";
             touchOrMousePanActive = false;
